@@ -5,21 +5,21 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { Label } from "@/components/ui/label";
+
+// ✅ Treat amount as string (for safe parsing)
+const schema = z.object({
+    amount: z.string().min(1, "Amount is required"),
+    description: z.string().min(1, "Description is required"),
+    date: z.string().min(1, "Date is required"),
+});
+
+type FormData = z.infer<typeof schema>;
 
 type AddTransactionFormProps = {
     onRefresh: () => void;
 };
-
-const schema = z.object({
-    amount: z.preprocess(
-        (val) => Number(val),
-        z.number({ required_error: "Amount is required", invalid_type_error: "Amount must be a number" }).positive("Amount must be a positive number")
-    ),
-    description: z.string().trim().min(1, "Description is required"),
-    date: z.string().refine((val) => !isNaN(Date.parse(val)), { message: "Please enter a valid date" }),
-});
 
 export default function AddTransactionForm({ onRefresh }: AddTransactionFormProps) {
     const {
@@ -27,74 +27,67 @@ export default function AddTransactionForm({ onRefresh }: AddTransactionFormProp
         handleSubmit,
         reset,
         formState: { errors, isSubmitting },
-    } = useForm({
+    } = useForm<FormData>({
         resolver: zodResolver(schema),
     });
 
-    const onSubmit = async (data: any) => {
+    const onSubmit = async (data: FormData) => {
+        const amountNumber = Number(data.amount);
+
+        if (isNaN(amountNumber) || amountNumber <= 0) {
+        toast.error("Amount must be a positive number");
+        return;
+        }
+
         try {
         await fetch("/api/transactions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...data, amount: Number(data.amount) }),
+            body: JSON.stringify({
+            ...data,
+            amount: amountNumber,
+            }),
         });
 
-        toast.success("Transaction added!");
+        toast.success("Transaction Added!");
         reset();
         onRefresh();
-        } catch {
-        toast.error("Something went wrong");
+        } catch (error) {
+            console.error("Add transaction error:", error);
+            toast.error("Error adding transaction!");
         }
     };
 
     return (
         <form
         onSubmit={handleSubmit(onSubmit)}
-        className="max-w-md mx-auto p-6 bg-white rounded-lg shadow-md space-y-6"
+        className="space-y-4 p-4 border rounded-lg max-w-md mx-auto"
         >
-        <h2 className="text-2xl font-semibold text-gray-800 text-center">Add New Transaction</h2>
-
-        <div className="flex flex-col gap-4 sm:flex-row sm:space-x-4">
-            <div className="flex-1">
-            <Label htmlFor="amount" className="block mb-1 font-medium text-gray-700">Amount (₹)</Label>
-            <Input
-                type="number"
-                id="amount"
-                placeholder="Enter amount"
-                {...register("amount")}
-                className="w-full"
-            />
-            {errors.amount && <p className="text-red-500 text-sm mt-1">{errors.amount.message as string}</p>}
-            </div>
-
-            <div className="flex-1">
-            <Label htmlFor="date" className="block mb-1 font-medium text-gray-700">Date</Label>
-            <Input
-                type="date"
-                id="date"
-                {...register("date")}
-                className="w-full"
-            />
-            {errors.date && <p className="text-red-500 text-sm mt-1">{errors.date.message as string}</p>}
-            </div>
+        <div>
+            <Label htmlFor="amount">Amount</Label>
+            <Input type="number" id="amount" {...register("amount")} />
+            {errors.amount && (
+            <p className="text-red-500 text-sm">{errors.amount.message}</p>
+            )}
         </div>
 
         <div>
-            <Label htmlFor="description" className="block mb-1 font-medium text-gray-700">Description</Label>
-            <Input
-            type="text"
-            id="description"
-            placeholder="Enter description"
-            {...register("description")}
-            />
-            {errors.description && <p className="text-red-500 text-sm mt-1">{errors.description.message as string}</p>}
+            <Label htmlFor="description">Description</Label>
+            <Input type="text" id="description" {...register("description")} />
+            {errors.description && (
+            <p className="text-red-500 text-sm">{errors.description.message}</p>
+            )}
         </div>
 
-        <Button
-            type="submit"
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-md py-3 transition-colors duration-300"
-            disabled={isSubmitting}
-        >
+        <div>
+            <Label htmlFor="date">Date</Label>
+            <Input type="date" id="date" {...register("date")} />
+            {errors.date && (
+            <p className="text-red-500 text-sm">{errors.date.message}</p>
+            )}
+        </div>
+
+        <Button type="submit" disabled={isSubmitting}>
             {isSubmitting ? "Adding..." : "Add Transaction"}
         </Button>
         </form>
